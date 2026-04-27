@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Boxing Timer</string>
+    <string name="app_name">Boxing Timer Pro</string>
+    <string name="btn_start">СТАРТ</string>
+    <string name="btn_pause">ПАУЗА</string>
+    <string name="btn_reset">СБРОС</string>
+    <string name="status_work">РАБОТА</string>
+    <string name="status_rest">ОТДЫХ</string>
+    <string name="round_format">РАУНД %1$d / %2$d</string>
 </resources>
