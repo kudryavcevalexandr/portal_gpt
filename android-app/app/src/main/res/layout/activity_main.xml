@@ -55,14 +55,6 @@
             android:text="@string/btn_start" />
 
         <Button
-            android:id="@+id/btnPause"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="8dp"
-            android:layout_weight="1"
-            android:text="@string/btn_pause" />
-
-        <Button
             android:id="@+id/btnReset"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
