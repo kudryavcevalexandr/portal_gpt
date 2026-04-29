@@ -10,15 +10,14 @@ source.exclude_dirs = android-app,.git,__pycache__,.venv,venv
 
 version = 0.2.0
 
-requirements = python3,kivy
+requirements = python3,kivy,hostpython3
 
 orientation = portrait
 fullscreen = 0
 
-android.sdk = 33
 android.api = 33
 android.minapi = 24
-android.ndk = 25b
+android.ndk = 25c
 android.accept_sdk_license = True
 android.archs = arm64-v8a,armeabi-v7a
 
