@@ -86,6 +86,8 @@ class TimerScreen(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.timer_event = None
+        self.flash_event = None
+        self.flash_active = False
         self.round_flash_schedule = set()
         self.round_duration = WORK_SECONDS
         self.ten_sec_played = False
@@ -116,6 +118,12 @@ class TimerScreen(BoxLayout):
     def update_display(self):
         self.timer_text = self._format_time(self.time_left)
         self.round_text = f"ROUND {self.current_round} / {TOTAL_ROUNDS}"
+
+        if self.flash_active:
+            self.bg_color = (1.0, 0.92, 0.35, 1)
+            self.timer_color = (0.07, 0.07, 0.07, 1)
+            self.status_color = (0.07, 0.07, 0.07, 1)
+            return
 
         if self.is_break:
             self.bg_color = (0.18, 0.73, 0.35, 1)
@@ -164,13 +172,25 @@ class TimerScreen(BoxLayout):
     def _trigger_punch(self):
         if not self.started or self.paused or self.is_break:
             return
-        self.bg_color = (1.0, 0.92, 0.35, 1)
-        Clock.schedule_once(lambda _dt: self.update_display(), 0.15)
+        self.flash_active = True
+        if self.flash_event:
+            self.flash_event.cancel()
+        self.flash_event = Clock.schedule_once(self._clear_flash, 0.18)
+        self.update_display()
         self._play(self.punch_sound)
+
+    def _clear_flash(self, _dt):
+        self.flash_active = False
+        self.flash_event = None
+        self.update_display()
 
     def _setup_phase(self):
         self.ten_sec_played = False
         self._clear_punch_schedule()
+        self.flash_active = False
+        if self.flash_event:
+            self.flash_event.cancel()
+            self.flash_event = None
 
         if self.is_break:
             self.status_text = "REST"
@@ -179,6 +199,7 @@ class TimerScreen(BoxLayout):
             self.status_text = f"WORK — ROUND {self.current_round}"
             self.round_duration = WORK_SECONDS
             self.time_left = self.round_duration
+            # Play a "round start" cue at the beginning of every work round.
             self._play(self.start_sound)
             self.round_flash_schedule = self._build_round_schedule()
         self.update_display()
