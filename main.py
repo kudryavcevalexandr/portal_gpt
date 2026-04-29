@@ -5,7 +5,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.audio import SoundLoader
 from kivy.lang import Builder
-from kivy.properties import NumericProperty, StringProperty, BooleanProperty
+from kivy.properties import NumericProperty, StringProperty, BooleanProperty, ListProperty
 from kivy.uix.boxlayout import BoxLayout
 
 WORK_SECONDS = 180
@@ -79,9 +79,9 @@ class TimerScreen(BoxLayout):
     round_text = StringProperty(f"ROUND 1 / {TOTAL_ROUNDS}")
     timer_text = StringProperty("03:00")
 
-    bg_color = (1, 1, 1, 1)
-    timer_color = (0.07, 0.07, 0.07, 1)
-    status_color = (0.07, 0.07, 0.07, 1)
+    bg_color = ListProperty([1, 1, 1, 1])
+    timer_color = ListProperty([0.07, 0.07, 0.07, 1])
+    status_color = ListProperty([0.07, 0.07, 0.07, 1])
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -170,7 +170,7 @@ class TimerScreen(BoxLayout):
             self.status_text = "REST"
             self.time_left = BREAK_SECONDS
         else:
-            self.status_text = "WORK"
+            self.status_text = f"WORK — ROUND {self.current_round}"
             self.time_left = WORK_SECONDS
             self._play(self.start_sound)
             self._schedule_punches_for_round()
@@ -206,7 +206,7 @@ class TimerScreen(BoxLayout):
         if not self.started:
             return
         self.paused = False
-        self.status_text = "REST" if self.is_break else "WORK"
+        self.status_text = "REST" if self.is_break else f"WORK — ROUND {self.current_round}"
         if not self.is_break:
             self._schedule_punches_for_round()
 
