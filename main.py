@@ -86,7 +86,8 @@ class TimerScreen(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.timer_event = None
-        self.punch_events = []
+        self.round_flash_schedule = set()
+        self.round_duration = WORK_SECONDS
         self.ten_sec_played = False
         self.start_sound = self._load_sound("start.mp3")
         self.end_sound = self._load_sound("end10.mp3")
@@ -132,35 +133,40 @@ class TimerScreen(BoxLayout):
                 self.timer_color = (0.07, 0.07, 0.07, 1)
 
     def _clear_punch_schedule(self):
-        for event in self.punch_events:
-            event.cancel()
-        self.punch_events = []
+        self.round_flash_schedule = set()
+
+    def _can_place_flash(self, second, selected):
+        return all(abs(second - existing) >= 2 for existing in selected)
 
     def _build_round_schedule(self):
-        # Avoid punch cues in final 10 seconds.
-        second_pool = list(range(0, WORK_SECONDS - 10))
-        random.shuffle(second_pool)
-        # 12 single + 3 double cues distributed randomly.
-        single_hits = sorted(second_pool[:12])
-        double_hits = sorted(second_pool[12:15])
-        return [(sec, "single") for sec in single_hits] + [(sec, "double") for sec in double_hits]
+        available_until = self.round_duration - 10
+        schedule = set()
 
-    def _schedule_punches_for_round(self):
-        self._clear_punch_schedule()
-        if self.is_break:
-            return
+        minute_start = 0
+        while minute_start < available_until:
+            minute_end = min(minute_start + 60, available_until)
+            minute_range = list(range(minute_start, minute_end))
+            random.shuffle(minute_range)
+            target_per_minute = min(10, len(minute_range))
+            selected_this_minute = []
 
-        for second, hit_type in self._build_round_schedule():
-            ev = Clock.schedule_once(lambda _dt, ht=hit_type: self._trigger_punch(ht), second)
-            self.punch_events.append(ev)
+            for second in minute_range:
+                if len(selected_this_minute) >= target_per_minute:
+                    break
+                if self._can_place_flash(second, schedule):
+                    selected_this_minute.append(second)
+                    schedule.add(second)
 
-    def _trigger_punch(self, hit_type):
+            minute_start += 60
+
+        return schedule
+
+    def _trigger_punch(self):
         if not self.started or self.paused or self.is_break:
             return
+        self.bg_color = (1.0, 0.92, 0.35, 1)
+        Clock.schedule_once(lambda _dt: self.update_display(), 0.15)
         self._play(self.punch_sound)
-        if hit_type == "double":
-            ev = Clock.schedule_once(lambda _dt: self._play(self.punch_sound), 0.24)
-            self.punch_events.append(ev)
 
     def _setup_phase(self):
         self.ten_sec_played = False
@@ -171,15 +177,19 @@ class TimerScreen(BoxLayout):
             self.time_left = BREAK_SECONDS
         else:
             self.status_text = f"WORK — ROUND {self.current_round}"
-            self.time_left = WORK_SECONDS
+            self.round_duration = WORK_SECONDS
+            self.time_left = self.round_duration
             self._play(self.start_sound)
-            self._schedule_punches_for_round()
+            self.round_flash_schedule = self._build_round_schedule()
         self.update_display()
 
     def _tick(self, _dt):
         if self.paused or not self.started:
             return
         if self.time_left > 0:
+            elapsed = self.round_duration - self.time_left
+            if not self.is_break and elapsed in self.round_flash_schedule:
+                self._trigger_punch()
             self.time_left -= 1
             self.update_display()
         else:
@@ -200,15 +210,12 @@ class TimerScreen(BoxLayout):
             return
         self.paused = True
         self.status_text = "PAUSE"
-        self._clear_punch_schedule()
 
     def resume_training(self):
         if not self.started:
             return
         self.paused = False
         self.status_text = "REST" if self.is_break else f"WORK — ROUND {self.current_round}"
-        if not self.is_break:
-            self._schedule_punches_for_round()
 
     def stop_training(self):
         if self.timer_event:
