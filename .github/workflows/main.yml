@@ -33,6 +33,12 @@ jobs:
             "platforms;android-33" \
             "build-tools;34.0.0"
 
+      - name: Install Android SDK licenses
+        run: |
+          export ANDROID_SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+          yes | sdkmanager --licenses || true
+
       - name: Build APK
         run: |
           export ANDROID_SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
