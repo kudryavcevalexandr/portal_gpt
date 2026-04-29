@@ -16,8 +16,27 @@ jobs:
           sudo apt install -y python3-pip git zip unzip openjdk-17-jdk autoconf automake libtool pkg-config
           pip3 install buildozer cython
 
+      - name: Prepare Android SDK for Buildozer
+        run: |
+          set -euxo pipefail
+          export ANDROID_SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          mkdir -p "$ANDROID_SDK_ROOT/build-tools"
+
+          curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip" -o /tmp/cmdline-tools.zip
+          unzip -q -o /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
+          rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          mv /tmp/cmdline-tools/cmdline-tools "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;34.0.0"
+
       - name: Build APK
         run: |
+          export ANDROID_SDK_ROOT="$HOME/.buildozer/android/platform/android-sdk"
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
           yes | buildozer android debug
 
       - name: Upload APK
