@@ -165,7 +165,7 @@ class TimerScreen(BoxLayout):
         if not self.started or self.paused or self.is_break:
             return
         self.bg_color = (1.0, 0.92, 0.35, 1)
-        Clock.schedule_once(lambda _dt: self.update_display(), 0.15)
+        Clock.schedule_once(lambda _dt: self.update_display(), 0.75)
         self._play(self.punch_sound)
 
     def _setup_phase(self):
