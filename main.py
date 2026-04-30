@@ -89,6 +89,7 @@ class TimerScreen(BoxLayout):
         self.round_flash_schedule = set()
         self.round_duration = WORK_SECONDS
         self.ten_sec_played = False
+        self.punch_reset_event = None
         self.start_sound = self._load_sound("start.mp3")
         self.end_sound = self._load_sound("end10.mp3")
         self.punch_sound = self._load_sound("punch.mp3")
@@ -164,8 +165,20 @@ class TimerScreen(BoxLayout):
     def _trigger_punch(self):
         if not self.started or self.paused or self.is_break:
             return
-        self.bg_color = (1.0, 0.92, 0.35, 1)
-        Clock.schedule_once(lambda _dt: self.update_display(), 0.75)
+
+        if self.punch_reset_event is not None:
+            self.punch_reset_event.cancel()
+            self.punch_reset_event = None
+
+        def set_punch_color(_dt):
+            self.bg_color = (1.0, 0.92, 0.35, 1)
+
+        def reset_color(_dt):
+            self.punch_reset_event = None
+            self.bg_color = (0.18, 0.73, 0.35, 1) if self.is_break else (1, 1, 1, 1)
+
+        Clock.schedule_once(set_punch_color, 0)
+        self.punch_reset_event = Clock.schedule_once(reset_color, 0.2)
         self._play(self.punch_sound)
 
     def _setup_phase(self):
