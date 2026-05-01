@@ -32,6 +32,7 @@ class TimerService : Service() {
     private var status = TimerStatus.WORK
     private var remainingSeconds = WORK_DURATION_SECONDS
     private var playedEnd10 = false
+    private var isFinished = false
 
     private var startPlayer: MediaPlayer? = null
     private var punchPlayer: MediaPlayer? = null
@@ -64,6 +65,9 @@ class TimerService : Service() {
 
     private fun startTimer() {
         if (timerJob?.isActive == true) return
+        if (isFinished) {
+            resetTimerState()
+        }
 
         if (remainingSeconds == WORK_DURATION_SECONDS && status == TimerStatus.WORK) {
             playStartSound()
@@ -99,17 +103,29 @@ class TimerService : Service() {
     private fun resetTimer() {
         timerJob?.cancel()
         timerJob = null
+        resetTimerState()
+        broadcastState()
+        updateNotification()
+    }
+
+    private fun resetTimerState() {
         currentRound = 1
         status = TimerStatus.WORK
         remainingSeconds = WORK_DURATION_SECONDS
         playedEnd10 = false
-        broadcastState()
-        updateNotification()
+        isFinished = false
     }
 
     private fun moveToNextPhase() {
         when (status) {
             TimerStatus.WORK -> {
+                if (currentRound >= TOTAL_ROUNDS) {
+                    timerJob?.cancel()
+                    timerJob = null
+                    remainingSeconds = 0
+                    isFinished = true
+                    return
+                }
                 status = TimerStatus.REST
                 remainingSeconds = REST_DURATION_SECONDS
                 playedEnd10 = false
@@ -164,6 +180,7 @@ class TimerService : Service() {
             putExtra(EXTRA_ROUND, currentRound)
             putExtra(EXTRA_STATUS, status.name)
             putExtra(EXTRA_IS_RUNNING, timerJob?.isActive == true)
+            putExtra(EXTRA_IS_FINISHED, isFinished)
         }
         sendBroadcast(stateIntent)
     }
@@ -218,10 +235,12 @@ class TimerService : Service() {
         const val EXTRA_ROUND = "extra_round"
         const val EXTRA_STATUS = "extra_status"
         const val EXTRA_IS_RUNNING = "extra_is_running"
+        const val EXTRA_IS_FINISHED = "extra_is_finished"
 
         private const val CHANNEL_ID = "boxing_timer_channel"
         private const val NOTIFICATION_ID = 101
         private const val WORK_DURATION_SECONDS = 3 * 60
         private const val REST_DURATION_SECONDS = 60
+        private const val TOTAL_ROUNDS = 12
     }
 }

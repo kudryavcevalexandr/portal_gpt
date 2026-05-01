@@ -6,5 +6,6 @@
     <string name="btn_reset">СБРОС</string>
     <string name="status_work">РАБОТА</string>
     <string name="status_rest">ОТДЫХ</string>
+    <string name="status_end">end</string>
     <string name="round_format">РАУНД %1$d / %2$d</string>
 </resources>
