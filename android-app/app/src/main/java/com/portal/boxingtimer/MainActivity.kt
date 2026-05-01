@@ -1,7 +1,9 @@
 package com.portal.boxingtimer
 
 import android.os.Bundle
+import android.view.WindowManager
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -18,7 +20,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        val rootLayout = findViewById<LinearLayout>(R.id.rootLayout)
         val timerText = findViewById<TextView>(R.id.tvTimer)
         val statusLabel = findViewById<TextView>(R.id.tvStatus)
         val roundsLabel = findViewById<TextView>(R.id.tvRounds)
@@ -44,14 +48,27 @@ class MainActivity : AppCompatActivity() {
                     timerText.text = viewModel.formatTime(state.remainingSeconds)
                     roundsLabel.text = getString(R.string.round_format, state.currentRound, TOTAL_ROUNDS)
 
-                    val isWork = state.status == TimerService.TimerStatus.WORK
-                    statusLabel.text = if (isWork) getString(R.string.status_work) else getString(R.string.status_rest)
-                    val color = ContextCompat.getColor(
-                        this@MainActivity,
-                        if (isWork) R.color.work_green else R.color.rest_red
-                    )
-                    statusLabel.setTextColor(color)
-                    timerText.setTextColor(color)
+                    if (state.isFinished) {
+                        statusLabel.text = getString(R.string.status_end)
+                        val color = ContextCompat.getColor(this@MainActivity, R.color.black)
+                        statusLabel.setTextColor(color)
+                        timerText.setTextColor(color)
+                        rootLayout.setBackgroundColor(
+                            ContextCompat.getColor(this@MainActivity, R.color.finish_green)
+                        )
+                    } else {
+                        val isWork = state.status == TimerService.TimerStatus.WORK
+                        statusLabel.text = if (isWork) getString(R.string.status_work) else getString(R.string.status_rest)
+                        val color = ContextCompat.getColor(
+                            this@MainActivity,
+                            if (isWork) R.color.work_green else R.color.rest_red
+                        )
+                        statusLabel.setTextColor(color)
+                        timerText.setTextColor(color)
+                        rootLayout.setBackgroundColor(
+                            ContextCompat.getColor(this@MainActivity, R.color.black)
+                        )
+                    }
 
                     btnStart.text = if (state.isRunning) {
                         getString(R.string.btn_pause)

@@ -74,6 +74,7 @@ class TimerScreen(BoxLayout):
     is_break = BooleanProperty(False)
     started = BooleanProperty(False)
     paused = BooleanProperty(False)
+    finished = BooleanProperty(False)
 
     status_text = StringProperty("READY")
     round_text = StringProperty(f"ROUND 1 / {TOTAL_ROUNDS}")
@@ -116,6 +117,14 @@ class TimerScreen(BoxLayout):
 
     def update_display(self):
         self.timer_text = self._format_time(self.time_left)
+        if self.finished:
+            self.status_text = "end"
+            self.round_text = f"ROUND {TOTAL_ROUNDS} / {TOTAL_ROUNDS}"
+            self.bg_color = (0.80, 1.0, 0.56, 1)
+            self.timer_color = (0.07, 0.07, 0.07, 1)
+            self.status_color = (0.07, 0.07, 0.07, 1)
+            return
+
         self.round_text = f"ROUND {self.current_round} / {TOTAL_ROUNDS}"
 
         if self.is_break:
@@ -211,6 +220,7 @@ class TimerScreen(BoxLayout):
     def start_training(self):
         self.started = True
         self.paused = False
+        self.finished = False
         self.current_round = 1
         self.is_break = False
         self._setup_phase()
@@ -246,6 +256,7 @@ class TimerScreen(BoxLayout):
         self._clear_punch_schedule()
         self.started = False
         self.paused = False
+        self.finished = False
         self.current_round = 1
         self.is_break = False
         self.status_text = "READY"
@@ -265,8 +276,7 @@ class TimerScreen(BoxLayout):
                     self.timer_event = None
                 self.started = False
                 self.paused = False
-                self.status_text = "FINISH!"
-                self.round_text = "TRAINING COMPLETE"
+                self.finished = True
                 self.time_left = 0
                 self.update_display()
         else:
@@ -280,6 +290,23 @@ class BoxingTimerApp(App):
         self.title = "Boxing Timer"
         Builder.load_string(KV)
         return TimerScreen()
+
+    def on_start(self):
+        try:
+            from jnius import autoclass
+            from android.runnable import run_on_ui_thread
+
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            LayoutParams = autoclass("android.view.WindowManager$LayoutParams")
+
+            @run_on_ui_thread
+            def keep_screen_on():
+                activity = PythonActivity.mActivity
+                activity.getWindow().addFlags(LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+            keep_screen_on()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

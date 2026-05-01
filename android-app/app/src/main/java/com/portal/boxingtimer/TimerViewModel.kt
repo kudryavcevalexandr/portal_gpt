@@ -18,7 +18,8 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
         val remainingSeconds: Int = WORK_DURATION_SECONDS,
         val currentRound: Int = 1,
         val status: TimerService.TimerStatus = TimerService.TimerStatus.WORK,
-        val isRunning: Boolean = false
+        val isRunning: Boolean = false,
+        val isFinished: Boolean = false
     )
 
     private val appContext = application.applicationContext
@@ -35,6 +36,7 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
             val statusName = intent.getStringExtra(TimerService.EXTRA_STATUS)
                 ?: TimerService.TimerStatus.WORK.name
             val running = intent.getBooleanExtra(TimerService.EXTRA_IS_RUNNING, false)
+            val finished = intent.getBooleanExtra(TimerService.EXTRA_IS_FINISHED, false)
 
             val status = runCatching { TimerService.TimerStatus.valueOf(statusName) }
                 .getOrDefault(TimerService.TimerStatus.WORK)
@@ -43,7 +45,8 @@ class TimerViewModel(application: Application) : AndroidViewModel(application) {
                 remainingSeconds = seconds,
                 currentRound = round,
                 status = status,
-                isRunning = running
+                isRunning = running,
+                isFinished = finished
             )
         }
     }

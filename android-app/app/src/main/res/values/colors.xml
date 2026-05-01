@@ -5,4 +5,5 @@
     <color name="rest_red">#FF0000</color>
     <color name="warning_yellow">#FFD700</color>
     <color name="white">#FFFFFF</color>
+    <color name="finish_green">#CCFF90</color>
 </resources>
