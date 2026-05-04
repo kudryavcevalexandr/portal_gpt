@@ -12,6 +12,15 @@ WORK_SECONDS = 180
 BREAK_SECONDS = 60
 TOTAL_ROUNDS = 8
 
+ROUND_SIGNAL_CONFIG = {
+    3: {"repeats": 3, "control": (6.0, 10.0), "attack": (2.0, 3.0)},
+    4: {"repeats": 4, "control": (5.0, 9.0), "attack": (2.0, 2.5)},
+    5: {"repeats": 5, "control": (4.0, 8.0), "attack": (1.8, 2.5)},
+    6: {"repeats": 6, "control": (4.0, 7.0), "attack": (1.5, 2.2)},
+    7: {"repeats": 7, "control": (3.0, 6.0), "attack": (1.2, 2.0)},
+    8: {"repeats": 8, "control": (3.0, 5.0), "attack": (1.0, 1.8)},
+}
+
 KV = """
 #:import dp kivy.metrics.dp
 
@@ -87,13 +96,18 @@ class TimerScreen(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.timer_event = None
-        self.round_flash_schedule = set()
         self.round_duration = WORK_SECONDS
         self.ten_sec_played = False
-        self.punch_reset_event = None
         self.start_sound = self._load_sound("start.mp3")
         self.end_sound = self._load_sound("end10.mp3")
         self.punch_sound = self._load_sound("punch.mp3")
+        self.attack_sound = self._load_sound("atack.mp3")
+
+        self.phase_plan = []
+        self.phase_by_second = {}
+        self.signal_schedule = []
+        self.last_signal_second = None
+
         self.update_display()
 
     def _load_sound(self, filename):
@@ -115,6 +129,15 @@ class TimerScreen(BoxLayout):
     def _format_time(seconds):
         return f"{seconds // 60:02d}:{seconds % 60:02d}"
 
+    def _is_phase_round(self):
+        return self.current_round >= 3 and not self.is_break
+
+    def _current_phase(self):
+        if not self._is_phase_round():
+            return None
+        elapsed = self.round_duration - self.time_left
+        return self.phase_by_second.get(elapsed)
+
     def update_display(self):
         self.timer_text = self._format_time(self.time_left)
         if self.finished:
@@ -132,77 +155,117 @@ class TimerScreen(BoxLayout):
             self.timer_color = (1, 1, 1, 1)
             self.status_color = (1, 1, 1, 1)
         else:
-            self.bg_color = (1, 1, 1, 1)
-            self.status_color = (0.07, 0.07, 0.07, 1)
-            if 0 < self.time_left <= 10:
-                self.timer_color = (0.90, 0.22, 0.21, 1)
-                if not self.ten_sec_played:
-                    self.ten_sec_played = True
-                    self._play(self.end_sound)
+            phase = self._current_phase()
+            if self.current_round <= 2:
+                self.bg_color = (0.55, 0.55, 0.55, 1)
+            elif phase == "attack":
+                self.bg_color = (0.92, 0.16, 0.14, 1)
             else:
-                self.timer_color = (0.07, 0.07, 0.07, 1)
+                self.bg_color = (0.23, 0.56, 0.32, 1)
 
-    def _clear_punch_schedule(self):
-        self.round_flash_schedule = set()
+            self.status_color = (1, 1, 1, 1)
+            self.timer_color = (1, 1, 1, 1)
+            if 0 < self.time_left <= 10 and not self.ten_sec_played:
+                self.ten_sec_played = True
+                self._play(self.end_sound)
 
-    def _can_place_flash(self, second, selected):
-        return all(abs(second - existing) >= 2 for existing in selected)
+    def _clear_round_state(self):
+        self.signal_schedule = []
+        self.phase_plan = []
+        self.phase_by_second = {}
+        self.last_signal_second = None
 
-    def _build_round_schedule(self):
-        available_until = self.round_duration - 10
-        schedule = set()
+    def _generate_phase_plan(self):
+        config = ROUND_SIGNAL_CONFIG[self.current_round]
+        phases = ["control", "attack"] * config["repeats"]
+        random.shuffle(phases)
 
-        minute_start = 0
-        while minute_start < available_until:
-            minute_end = min(minute_start + 60, available_until)
-            minute_range = list(range(minute_start, minute_end))
-            random.shuffle(minute_range)
-            target_per_minute = min(10, len(minute_range))
-            selected_this_minute = []
+        remaining = self.round_duration
+        plan = []
+        for idx, phase in enumerate(phases):
+            lo, hi = (10, 20) if phase == "control" else (5, 10)
+            duration = int(random.uniform(lo, hi))
+            min_for_rest = max(0, len(phases) - idx - 1)
+            duration = min(duration, max(1, remaining - min_for_rest))
+            plan.append({"phase": phase, "duration": duration})
+            remaining -= duration
+            if remaining <= 0:
+                break
 
-            for second in minute_range:
-                if len(selected_this_minute) >= target_per_minute:
-                    break
-                if self._can_place_flash(second, schedule):
-                    selected_this_minute.append(second)
-                    schedule.add(second)
+        if remaining > 0 and plan:
+            plan[-1]["duration"] += remaining
 
-            minute_start += 60
+        second = 0
+        phase_by_second = {}
+        for item in plan:
+            phase_name = item["phase"]
+            for _ in range(item["duration"]):
+                phase_by_second[second] = "control" if phase_name == "control" else "attack"
+                second += 1
+        return plan, phase_by_second
 
-        return schedule
-
-    def _trigger_punch(self):
-        if not self.started or self.paused or self.is_break:
+    def _schedule_signals(self):
+        if self.current_round <= 2:
+            self.signal_schedule = []
             return
 
-        if self.punch_reset_event is not None:
-            self.punch_reset_event.cancel()
-            self.punch_reset_event = None
+        config = ROUND_SIGNAL_CONFIG[self.current_round]
+        schedule = []
+        t = 0.0
+        while t < self.round_duration - 3:
+            phase = self.phase_by_second.get(int(t), "control")
+            interval_min, interval_max = config[phase]
+            interval = random.uniform(interval_min, interval_max)
+            t += interval
 
-        def set_punch_color(_dt):
-            self.bg_color = (1.0, 0.92, 0.35, 1)
+            if phase == "attack" and random.random() < 0.28:
+                t += random.uniform(2.0, 4.0)
 
-        def reset_color(_dt):
-            self.punch_reset_event = None
-            self.bg_color = (0.18, 0.73, 0.35, 1) if self.is_break else (1, 1, 1, 1)
+            second = int(t)
+            if second >= self.round_duration - 1:
+                break
+            if schedule and abs(second - schedule[-1]) < 2:
+                continue
+            schedule.append(second)
 
-        Clock.schedule_once(set_punch_color, 0)
-        self.punch_reset_event = Clock.schedule_once(reset_color, 0.2)
-        self._play(self.punch_sound)
+            if phase == "attack" and random.random() < 0.3:
+                follow_up = second + random.randint(1, 2)
+                if follow_up < self.round_duration - 1:
+                    schedule.append(follow_up)
+
+        self.signal_schedule = sorted(set(schedule))
+
+    def _trigger_signal(self, second):
+        phase = self.phase_by_second.get(second, "control")
+        self.last_signal_second = second
+        if phase == "attack":
+            if random.random() < 0.5:
+                self.status_text = "АТАКА: джеб → оттяжка → серия двоек (2–4) → выход"
+            else:
+                self.status_text = "АТАКА БЛИЦ: джеб → оттяжка → 2 быстрые двойки → выход"
+            self._play(self.attack_sound or self.punch_sound)
+        else:
+            self.status_text = "КОНТРОЛЬ: джеб → оттяжка → двойка → выход"
+            self._play(self.punch_sound)
 
     def _setup_phase(self):
         self.ten_sec_played = False
-        self._clear_punch_schedule()
+        self._clear_round_state()
 
         if self.is_break:
             self.status_text = "REST"
             self.time_left = BREAK_SECONDS
+            self.round_duration = BREAK_SECONDS
         else:
-            self.status_text = f"WORK — ROUND {self.current_round}"
             self.round_duration = WORK_SECONDS
             self.time_left = self.round_duration
+            if self.current_round <= 2:
+                self.status_text = f"РАЗМИНКА — ROUND {self.current_round}"
+            else:
+                self.status_text = f"WORK — ROUND {self.current_round}"
+                self.phase_plan, self.phase_by_second = self._generate_phase_plan()
+                self._schedule_signals()
             self._play(self.start_sound)
-            self.round_flash_schedule = self._build_round_schedule()
         self.update_display()
 
     def _tick(self, _dt):
@@ -210,8 +273,13 @@ class TimerScreen(BoxLayout):
             return
         if self.time_left > 0:
             elapsed = self.round_duration - self.time_left
-            if not self.is_break and elapsed in self.round_flash_schedule:
-                self._trigger_punch()
+            if not self.is_break and elapsed in self.signal_schedule:
+                self._trigger_signal(elapsed)
+            elif not self.is_break and self.current_round >= 3:
+                second = elapsed
+                self.status_text = "Без сигнала: движение, джеб, контроль дистанции"
+                if self.last_signal_second is not None and second - self.last_signal_second > 6:
+                    self.status_text = "ТИШИНА: работай первым (джеб, вход)"
             self.time_left -= 1
             self.update_display()
         else:
@@ -238,13 +306,18 @@ class TimerScreen(BoxLayout):
         if not self.started:
             return
         self.paused = False
-        self.status_text = "REST" if self.is_break else f"WORK — ROUND {self.current_round}"
+        if self.is_break:
+            self.status_text = "REST"
+        elif self.current_round <= 2:
+            self.status_text = f"РАЗМИНКА — ROUND {self.current_round}"
+        else:
+            self.status_text = f"WORK — ROUND {self.current_round}"
 
     def stop_training(self):
         if self.timer_event:
             self.timer_event.cancel()
             self.timer_event = None
-        self._clear_punch_schedule()
+        self._clear_round_state()
         self.started = False
         self.paused = False
         self.status_text = "STOPPED"
@@ -253,7 +326,7 @@ class TimerScreen(BoxLayout):
         if self.timer_event:
             self.timer_event.cancel()
             self.timer_event = None
-        self._clear_punch_schedule()
+        self._clear_round_state()
         self.started = False
         self.paused = False
         self.finished = False
@@ -261,11 +334,12 @@ class TimerScreen(BoxLayout):
         self.is_break = False
         self.status_text = "READY"
         self.time_left = WORK_SECONDS
+        self.round_duration = WORK_SECONDS
         self.ten_sec_played = False
         self.update_display()
 
     def next_step(self):
-        self._clear_punch_schedule()
+        self._clear_round_state()
         if not self.is_break:
             if self.current_round < TOTAL_ROUNDS:
                 self.is_break = True
