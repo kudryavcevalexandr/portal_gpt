@@ -28,14 +28,19 @@
             color: #111111;
         }
 
+        body.single-mode {
+            background: #f1c40f !important;
+            color: #111111 !important;
+        }
+
+        body.double-mode {
+            background: #ff1f1f !important;
+            color: #ffffff !important;
+        }
+
         body.break-mode {
             background: #2ecc71;
             color: #ffffff;
-        }
-
-        body.flash-red {
-            background: #ff1f1f !important;
-            color: #ffffff !important;
         }
 
         body.last-seconds #timer {
@@ -232,91 +237,78 @@
             punchTimeouts = [];
         }
 
-        function flashRed(times = 2) {
-            let delay = 0;
-            for (let i = 0; i < times; i++) {
-                setTimeout(() => {
-                    document.body.classList.add('flash-red');
-                }, delay);
-
-                setTimeout(() => {
-                    document.body.classList.remove('flash-red');
-                }, delay + 140);
-
-                delay += 220;
+        function setWorkBackground(mode) {
+            if (isBreak || !started) return;
+            document.body.className = 'work-mode';
+            if (mode === 'single') {
+                document.body.classList.add('single-mode');
+            } else if (mode === 'double') {
+                document.body.classList.add('double-mode');
             }
         }
 
         function triggerSinglePunch() {
             if (paused || isBreak || !started) return;
             playPunchSignal();
-            flashRed(1);
+            setWorkBackground('single');
+            const t = setTimeout(() => setWorkBackground(), 1500);
+            punchTimeouts.push(t);
         }
 
         function triggerDoublePunch() {
             if (paused || isBreak || !started) return;
-
             playPunchSignal();
-            flashRed(2);
+            setWorkBackground('double');
 
-            const t = setTimeout(() => {
+            const t1 = setTimeout(() => {
                 if (paused || isBreak || !started) return;
                 playPunchSignal();
             }, 240);
+            const t2 = setTimeout(() => setWorkBackground(), 3000);
 
-            punchTimeouts.push(t);
+            punchTimeouts.push(t1, t2);
         }
 
-        function isFarEnough(candidate, existing, minGap) {
-            for (const t of existing) {
-                if (Math.abs(candidate - t) < minGap) return false;
-            }
-            return true;
+        function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+            return aStart < bEnd && bStart < aEnd;
         }
 
-        function pickRandomSecond(minSec, maxSec, existing, minGap) {
-            const pool = [];
-            for (let s = minSec; s <= maxSec; s++) {
-                if (isFarEnough(s, existing, minGap)) {
-                    pool.push(s);
-                }
+        function canPlaceEvent(events, start, durationSec) {
+            const end = start + durationSec;
+            return !events.some(ev => rangesOverlap(start, end, ev.start, ev.start + ev.durationSec));
+        }
+
+        function tryPlaceEvents(events, count, durationSec, type, minSec, maxSec) {
+            let placed = 0;
+            let tries = 0;
+            while (placed < count && tries < 5000) {
+                tries++;
+                const start = minSec + Math.random() * (maxSec - minSec - durationSec);
+                if (!canPlaceEvent(events, start, durationSec)) continue;
+                events.push({ start, durationSec, type });
+                placed++;
             }
-            if (pool.length === 0) return null;
-            return pool[Math.floor(Math.random() * pool.length)];
+            return placed === count;
         }
 
         function buildMinuteSchedule(minuteIndex) {
             const events = [];
-            const usedSeconds = [];
-            const minGap = 2;
             const minuteStart = minuteIndex * 60;
+            const localMax = (currentRound === 3) ? 50 : 59;
 
-            // в последней минуте оставляем последние 10 сек под концовку
-            const localMax = (minuteIndex === 2) ? 49 : 59;
+            const singlesPlaced = tryPlaceEvents(events, 10, 1.5, 'single', 0, localMax);
+            const doublesPlaced = tryPlaceEvents(events, 3, 3, 'double', 0, localMax);
 
-            // 4 одинарных
-            for (let i = 0; i < 4; i++) {
-                const sec = pickRandomSecond(0, localMax, usedSeconds, minGap);
-                if (sec === null) break;
-                usedSeconds.push(sec);
-                events.push({
-                    secondFromRoundStart: minuteStart + sec,
-                    type: 'single'
-                });
+            if (!singlesPlaced || !doublesPlaced) {
+                console.warn('Could not place full event set for minute', minuteIndex + 1);
             }
 
-            // 3 двойных
-            for (let i = 0; i < 3; i++) {
-                const sec = pickRandomSecond(0, localMax, usedSeconds, minGap);
-                if (sec === null) break;
-                usedSeconds.push(sec);
-                events.push({
-                    secondFromRoundStart: minuteStart + sec,
-                    type: 'double'
-                });
-            }
-
-            return events.sort((a, b) => a.secondFromRoundStart - b.secondFromRoundStart);
+            return events
+                .sort((a, b) => a.start - b.start)
+                .map(ev => ({
+                    secondFromRoundStart: minuteStart + ev.start,
+                    type: ev.type
+                }));
         }
 
         function schedulePunchesForCurrentRound() {
@@ -329,7 +321,7 @@
             }
 
             allEvents.forEach(ev => {
-                const timeoutMs = ev.secondFromRoundStart * 1000;
+                const timeoutMs = Math.round(ev.secondFromRoundStart * 1000);
 
                 const t = setTimeout(() => {
                     if (ev.type === 'single') {
