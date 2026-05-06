@@ -35,7 +35,19 @@
 
         body.double-mode {
             background: #ff1f1f !important;
-            color: #ffffff !important;
+            color: #111111 !important;
+        }
+
+        body.work-mode #status,
+        body.work-mode #round-info,
+        body.work-mode #timer,
+        body.single-mode #status,
+        body.single-mode #round-info,
+        body.single-mode #timer,
+        body.double-mode #status,
+        body.double-mode #round-info,
+        body.double-mode #timer {
+            color: #111111 !important;
         }
 
         body.break-mode {
@@ -139,7 +151,10 @@
         let started = false;
         let paused = false;
         let wakeLock = null;
+        let wakeLockKeepAliveId = null;
         let tenSecPlayed = false;
+        let attackLoopTimeouts = [];
+        let attackAudio = null;
 
         const timerDisplay = document.getElementById('timer');
         const statusDisplay = document.getElementById('status');
@@ -196,10 +211,51 @@
             playTone(220, 70, 'sawtooth', 0.12);
         }
 
+        function clearAttackLoop() {
+            attackLoopTimeouts.forEach(t => clearTimeout(t));
+            attackLoopTimeouts = [];
+        }
+
+        function startAttackLoop() {
+            clearAttackLoop();
+            if (!attackAudio) {
+                attackAudio = new Audio('atack.mp3');
+                attackAudio.preload = 'auto';
+            }
+
+            const playWithGap = () => {
+                if (paused || isBreak || !started) return;
+                attackAudio.currentTime = 0;
+                attackAudio.play().then(() => {
+                    const waitMs = Math.round((attackAudio.duration || 0) * 1000) + 500;
+                    const t = setTimeout(playWithGap, waitMs);
+                    attackLoopTimeouts.push(t);
+                }).catch(() => {
+                    const t = setTimeout(playWithGap, 500);
+                    attackLoopTimeouts.push(t);
+                });
+            };
+
+            playWithGap();
+        }
+
+        function stopAttackLoop() {
+            clearAttackLoop();
+            if (attackAudio) {
+                attackAudio.pause();
+                attackAudio.currentTime = 0;
+            }
+        }
+
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
+                    wakeLock.addEventListener('release', () => {
+                        if (started && !paused && document.visibilityState === 'visible') {
+                            requestWakeLock();
+                        }
+                    });
                 }
             } catch (err) {
                 console.log('Wake Lock error:', err);
@@ -235,6 +291,7 @@
         function clearPunchSchedule() {
             punchTimeouts.forEach(t => clearTimeout(t));
             punchTimeouts = [];
+            stopAttackLoop();
         }
 
         function setWorkBackground(mode) {
@@ -259,12 +316,16 @@
             if (paused || isBreak || !started) return;
             playPunchSignal();
             setWorkBackground('double');
+            startAttackLoop();
 
             const t1 = setTimeout(() => {
                 if (paused || isBreak || !started) return;
                 playPunchSignal();
             }, 240);
-            const t2 = setTimeout(() => setWorkBackground(), 3000);
+            const t2 = setTimeout(() => {
+                setWorkBackground();
+                stopAttackLoop();
+            }, 3000);
 
             punchTimeouts.push(t1, t2);
         }
@@ -378,6 +439,13 @@
             currentRound = 1;
             isBreak = false;
             await requestWakeLock();
+            if (!wakeLockKeepAliveId) {
+                wakeLockKeepAliveId = setInterval(() => {
+                    if (started && !paused && document.visibilityState === 'visible') {
+                        requestWakeLock();
+                    }
+                }, 15000);
+            }
             setupPhase();
             runTimer();
         }
@@ -400,6 +468,11 @@
         function stopTraining() {
             clearInterval(timerId);
             clearPunchSchedule();
+            if (wakeLockKeepAliveId) {
+                clearInterval(wakeLockKeepAliveId);
+                wakeLockKeepAliveId = null;
+            }
+            if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
             started = false;
             paused = false;
             statusDisplay.innerText = 'STOPPED';
@@ -411,6 +484,11 @@
 
             started = false;
             paused = false;
+            if (wakeLockKeepAliveId) {
+                clearInterval(wakeLockKeepAliveId);
+                wakeLockKeepAliveId = null;
+            }
+            if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
             currentRound = 1;
             isBreak = false;
             timeLeft = WORK_SECONDS;
@@ -433,6 +511,11 @@
                     clearInterval(timerId);
                     started = false;
                     paused = false;
+                    if (wakeLockKeepAliveId) {
+                        clearInterval(wakeLockKeepAliveId);
+                        wakeLockKeepAliveId = null;
+                    }
+                    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
                     statusDisplay.innerText = 'FINISH!';
                     roundDisplay.innerText = 'TRAINING COMPLETE';
                     timerDisplay.innerText = '00:00';
