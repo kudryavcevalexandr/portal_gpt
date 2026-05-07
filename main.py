@@ -82,7 +82,7 @@ class TimerScreen(BoxLayout):
 
     bg_color = ListProperty([1, 1, 1, 1])
     timer_color = ListProperty([0.07, 0.07, 0.07, 1])
-    status_color = ListProperty([0.07, 0.07, 0.07, 1])
+    status_color = ListProperty([1, 0, 0, 1])
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -134,7 +134,7 @@ class TimerScreen(BoxLayout):
             self.round_text = f"ROUND {TOTAL_ROUNDS} / {TOTAL_ROUNDS}"
             self.bg_color = (0.80, 1.0, 0.56, 1)
             self.timer_color = (0.07, 0.07, 0.07, 1)
-            self.status_color = (0.07, 0.07, 0.07, 1)
+            self.status_color = (1, 0, 0, 1)
             return
 
         self.round_text = f"ROUND {self.current_round} / {TOTAL_ROUNDS}"
@@ -142,7 +142,7 @@ class TimerScreen(BoxLayout):
         if self.is_break:
             self.bg_color = (0.18, 0.73, 0.35, 1)
             self.timer_color = (1, 1, 1, 1)
-            self.status_color = (1, 1, 1, 1)
+            self.status_color = (1, 0, 0, 1)
         else:
             signal = self._current_signal()
             if self.current_round <= 2:
@@ -154,7 +154,7 @@ class TimerScreen(BoxLayout):
             else:
                 self.bg_color = (1, 1, 1, 1)
 
-            self.status_color = (1, 1, 1, 1)
+            self.status_color = (1, 0, 0, 1)
             self.timer_color = (1, 1, 1, 1)
             if 0 < self.time_left <= 10 and not self.ten_sec_played:
                 self.ten_sec_played = True
