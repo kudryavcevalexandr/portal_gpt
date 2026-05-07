@@ -8,6 +8,11 @@ from kivy.lang import Builder
 from kivy.properties import NumericProperty, StringProperty, BooleanProperty, ListProperty
 from kivy.uix.boxlayout import BoxLayout
 
+try:
+    from jnius import autoclass
+except Exception:
+    autoclass = None
+
 WORK_SECONDS = 180
 BREAK_SECONDS = 60
 TOTAL_ROUNDS = 8
@@ -69,6 +74,8 @@ KV = """
 
 
 class TimerScreen(BoxLayout):
+    _keep_screen_on_applied = False
+
     time_left = NumericProperty(WORK_SECONDS)
     current_round = NumericProperty(1)
     is_break = BooleanProperty(False)
@@ -244,6 +251,30 @@ class TimerScreen(BoxLayout):
         else:
             self.next_step()
 
+
+    def _set_keep_screen_on(self, enabled):
+        if autoclass is None:
+            return
+
+        if enabled and self._keep_screen_on_applied:
+            return
+        if not enabled and not self._keep_screen_on_applied:
+            return
+
+        try:
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            WindowManagerLayoutParams = autoclass("android.view.WindowManager$LayoutParams")
+            activity = PythonActivity.mActivity
+            window = activity.getWindow()
+            flag = WindowManagerLayoutParams.FLAG_KEEP_SCREEN_ON
+            if enabled:
+                window.addFlags(flag)
+            else:
+                window.clearFlags(flag)
+            self._keep_screen_on_applied = enabled
+        except Exception:
+            pass
+
     def start_training(self):
         self.started = True
         self.paused = False
@@ -254,6 +285,7 @@ class TimerScreen(BoxLayout):
         if self.timer_event:
             self.timer_event.cancel()
         self.timer_event = Clock.schedule_interval(self._tick, 1)
+        self._set_keep_screen_on(True)
 
     def pause_training(self):
         if not self.started:
@@ -276,6 +308,7 @@ class TimerScreen(BoxLayout):
                 if self.timer_event:
                     self.timer_event.cancel()
                 self.update_display()
+                self._set_keep_screen_on(False)
                 return
         else:
             if self.current_round >= TOTAL_ROUNDS:
@@ -284,6 +317,7 @@ class TimerScreen(BoxLayout):
                 if self.timer_event:
                     self.timer_event.cancel()
                 self.update_display()
+                self._set_keep_screen_on(False)
                 return
             self.is_break = True
 
@@ -303,6 +337,7 @@ class TimerScreen(BoxLayout):
         self._clear_round_state()
         self.status_text = "READY"
         self.update_display()
+        self._set_keep_screen_on(False)
 
 
 class TimerApp(App):
